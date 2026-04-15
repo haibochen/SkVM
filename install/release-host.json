@@ -1,0 +1,5 @@
+{
+  "owner": "SJTU-IPADS",
+  "repo": "SkVM",
+  "comment": "Single source of truth for the public release host. install.sh and postinstall.js both read this."
+}

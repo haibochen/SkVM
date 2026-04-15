@@ -1,0 +1,9 @@
+[test]
+
+# Only discover tests under test/ directory, not skvm-data fixtures
+root = "test"
+
+# First preload redirects SKVM_CACHE to a temp dir so tests never read or
+# write the real user-global ~/.skvm cache. Second preload installs an
+# exit-time sweeper for test-session artifacts in that temp cache.
+preload = ["./test/helpers/test-cache-setup.ts", "./test/helpers/test-env.ts"]

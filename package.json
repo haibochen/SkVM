@@ -1,0 +1,60 @@
+{
+  "name": "@ipads-skvm/skvm",
+  "version": "0.1.0",
+  "description": "SkVM — compile and run LLM agent skills across heterogeneous models and harnesses",
+  "keywords": [
+    "llm",
+    "agent",
+    "skills",
+    "ai",
+    "bun"
+  ],
+  "license": "MIT",
+  "author": "lec <cen-le@sjtu.edu.cn>",
+  "homepage": "https://skillvm.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SJTU-IPADS/SkVM.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SJTU-IPADS/SkVM/issues"
+  },
+  "type": "module",
+  "bin": {
+    "skvm": "./bin/skvm.js"
+  },
+  "files": [
+    "bin/",
+    "install/postinstall.js",
+    "install/release-host.json",
+    "install/opencode-version.json",
+    "skills/skvm-jit/",
+    "skills/skvm-general/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "skvm": "bun run src/index.ts",
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit",
+    "build:binary": "bun build src/index.ts --compile --minify --outfile dist/skvm",
+    "build:all": "scripts/build-all-targets.sh",
+    "postinstall": "node install/postinstall.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
+    "smol-toml": "^1.6.1",
+    "yaml": "^2.8.3",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.8.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

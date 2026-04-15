@@ -1,0 +1,20 @@
+{
+  "version": "v1.4.3",
+  "owner": "anomalyco",
+  "repo": "opencode",
+  "assets": {
+    "darwin-arm64": { "name": "opencode-darwin-arm64.zip", "format": "zip" },
+    "darwin-x64": { "name": "opencode-darwin-x64.zip", "format": "zip" },
+    "linux-x64": { "name": "opencode-linux-x64.tar.gz", "format": "tar.gz" },
+    "linux-arm64": { "name": "opencode-linux-arm64.tar.gz", "format": "tar.gz" }
+  },
+  "sha256": {
+    "darwin-arm64": "d085c072087fa1cf076058ae28785a31a9368e0f3c42985ea8c558036fcb9b0c",
+    "darwin-x64": "1431028e324dcdd2322e5aa710444a52c6de74d1a382f8082a4ad12fdae0768f",
+    "linux-x64": "34d503ebb029853293be6fd4d441bbb2dbb03919bfa4525e88b1ca55d68f3e17",
+    "linux-arm64": "4cbf32f4c31da7dae14712b65aadbce6acfa1a7a85bee986a2ce4eaaed4eb5c8"
+  },
+  "archiveLayout": "flat-single-binary",
+  "archiveLayoutNote": "Each archive contains a single flat `opencode` executable at the top level (no bin/ wrapper). Both install.sh and postinstall.js extract to a staging dir then relocate to <version_dir>/bin/opencode.",
+  "comment": "Pinned opencode version bundled with skvm (see plan §1.8). Keep in sync with the OPENCODE_VERSION constants in install/install.sh and install/postinstall.js. Upstream repo was sst/opencode; GitHub now redirects to anomalyco/opencode (ownership transferred). When bumping, download each asset, verify with `shasum -a 256`, update sha256[] accordingly."
+}

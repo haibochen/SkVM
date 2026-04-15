@@ -1,0 +1,30 @@
+{
+  "skillName": "Name of the skill from the document",
+  "purposes": [
+    {
+      "id": "short-kebab-case-identifier (e.g. extract-text, create-pdf)",
+      "description": "What this functional goal accomplishes",
+      "currentPath": {
+        "primitives": [
+          {
+            "id": "primitive.id from the available list (e.g. gen.code.python)",
+            "minLevel": "L1 or L2 or L3",
+            "evidence": "Quote or paraphrase from skill text explaining why this capability at this level is needed"
+          }
+        ]
+      },
+      "alternativePaths": [
+        {
+          "primitives": [
+            {
+              "id": "primitive.id",
+              "minLevel": "L1 or L2 or L3",
+              "evidence": "Why this alternative primitive works for the same goal"
+            }
+          ],
+          "note": "Description of how this alternative approach achieves the same goal using different capabilities"
+        }
+      ]
+    }
+  ]
+}

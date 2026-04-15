@@ -1,0 +1,3 @@
+[submodule "skvm-data"]
+	path = skvm-data
+	url = https://github.com/SJTU-IPADS/SkVM-data.git
