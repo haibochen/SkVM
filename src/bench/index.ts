@@ -11,7 +11,7 @@ import {
   printCompareBenchSkillReport,
   writeCompareBenchSkillOutputs,
 } from "./compare.ts"
-import { LOGS_DIR, getBenchLogDir } from "../core/config.ts"
+import { LOGS_DIR, getBenchLogDir, SKVM_CACHE } from "../core/config.ts"
 import { mkdir, readdir } from "node:fs/promises"
 import { runDeferredJudge, readDeferredResults, mergeDeferredResults } from "../framework/deferred-eval.ts"
 import { ALL_ADAPTERS, type AdapterName, isAdapterName } from "../adapters/registry.ts"
@@ -153,6 +153,18 @@ export async function runBench(flags: Record<string, string>): Promise<void> {
   if (adapters.length > 1 && models.length > 1) {
     console.error("Error: cannot combine multiple adapters with multiple models. Use one axis at a time.")
     process.exit(1)
+  }
+
+  {
+    const { printBanner, describeModelRoute, describeAdapter, shortenPath } = await import("../core/banner.ts")
+    printBanner("bench", [
+      ["Adapter", adapters.map(a => describeAdapter(a)).join(", ")],
+      ["Model", models.map(m => describeModelRoute(m)).join(", ")],
+      ["Judge", describeModelRoute(baseConfig.judgeModel)],
+      ["Conditions", baseConfig.conditions.join(", ")],
+      ["Cache", shortenPath(SKVM_CACHE)],
+      ["Output", shortenPath(LOGS_DIR) + "/bench"],
+    ])
   }
 
   if (adapters.length > 1) {

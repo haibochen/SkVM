@@ -193,8 +193,16 @@ Options:
   // runs against each job's model id — it throws a clear error citing the
   // matched route and its apiKeyEnv.
 
+  const { printBanner, describeModelRoute, describeAdapter, shortenPath } = await import("./core/banner.ts")
+  const { SKVM_CACHE, PROFILES_DIR, getProfileLogDir } = await import("./core/config.ts")
+  printBanner("profile", [
+    ["Adapter", adapters.map(a => describeAdapter(a)).join(", ")],
+    ["Model", models.map(m => describeModelRoute(m)).join(", ")],
+    ["Cache", shortenPath(SKVM_CACHE)],
+    ["Output", shortenPath(PROFILES_DIR)],
+  ])
+
   const { profile, profileMulti, hasProfile } = await import("./profiler/index.ts")
-  const { getProfileLogDir } = await import("./core/config.ts")
   const { mkdirSync } = await import("node:fs")
 
   // Build job list: (model, adapter) combos that need profiling
@@ -355,6 +363,20 @@ Notes:
   }
   const harness: AdapterName = harnessStr
 
+  {
+    const { printBanner, describeModelRoute, describeAdapter, shortenPath } = await import("./core/banner.ts")
+    const { SKVM_CACHE } = await import("./core/config.ts")
+    const bannerLines: [string, string][] = [
+      ["Adapter", describeAdapter(harness)],
+      ["Model", describeModelRoute(model)],
+      ["Task", taskPath],
+    ]
+    if (skillPath) bannerLines.push(["Skill", skillPath])
+    if (flags.workdir) bannerLines.push(["WorkDir", shortenPath(flags.workdir)])
+    bannerLines.push(["Cache", shortenPath(SKVM_CACHE)])
+    printBanner("run", bannerLines)
+  }
+
   // Provider-specific API key is checked lazily by createProviderForModel().
 
   const { executeRun, loadRunSkill, loadRunTask } = await import("./run/index.ts")
@@ -469,6 +491,20 @@ Options:
     }
   }
 
+  const compilerModel = flags["compiler-model"] ?? MODEL_DEFAULTS.compiler
+  {
+    const { printBanner, describeModelRoute, describeAdapter, shortenPath } = await import("./core/banner.ts")
+    const { SKVM_CACHE, AOT_COMPILE_DIR } = await import("./core/config.ts")
+    printBanner("aot-compile", [
+      ["Adapter", adapters.map(a => describeAdapter(a)).join(", ")],
+      ["Model", models.map(m => describeModelRoute(m)).join(", ")],
+      ["Compiler", describeModelRoute(compilerModel)],
+      ["Skill", skillInputs.join(", ")],
+      ["Cache", shortenPath(SKVM_CACHE)],
+      ["Output", shortenPath(AOT_COMPILE_DIR)],
+    ])
+  }
+
   // ---------------------------------------------------------------------------
   // Resolve skills: each input is a path (skill directory or SKILL.md file).
   // Bare skill names were previously looked up in a registry; now the caller
@@ -563,7 +599,6 @@ Options:
   // Create shared provider and run jobs
   // ---------------------------------------------------------------------------
   const { createProviderForModel } = await import("./providers/registry.ts")
-  const compilerModel = flags["compiler-model"] ?? MODEL_DEFAULTS.compiler
   const provider = createProviderForModel(compilerModel)
   const { compileSkill, writeVariant } = await import("./compiler/index.ts")
   const { createSlotPool } = await import("./core/concurrency.ts")
@@ -669,6 +704,20 @@ Options:
   const harness: AdapterName = harnessStr
 
   const passes = flags.pass ? flags.pass.split(",").map(Number) : [...CLI_DEFAULTS.compilerPasses]
+  const pipelineCompilerModel = flags["compiler-model"] ?? MODEL_DEFAULTS.compiler
+
+  {
+    const { printBanner, describeModelRoute, describeAdapter, shortenPath } = await import("./core/banner.ts")
+    const { SKVM_CACHE, AOT_COMPILE_DIR } = await import("./core/config.ts")
+    printBanner("pipeline", [
+      ["Adapter", describeAdapter(harness)],
+      ["Model", describeModelRoute(model)],
+      ["Compiler", describeModelRoute(pipelineCompilerModel)],
+      ["Skill", skillPath],
+      ["Cache", shortenPath(SKVM_CACHE)],
+      ["Output", shortenPath(AOT_COMPILE_DIR)],
+    ])
+  }
 
   const { RunSession, shortModel: shortModelName } = await import("./core/run-session.ts")
   const { getCompileLogDir } = await import("./core/config.ts")
@@ -752,7 +801,6 @@ Options:
   console.log(`\nCompiling skill for ${model} -- ${harness}...`)
 
   const { createProviderForModel: createCompilerProvider } = await import("./providers/registry.ts")
-  const pipelineCompilerModel = flags["compiler-model"] ?? MODEL_DEFAULTS.compiler
   const provider = createCompilerProvider(pipelineCompilerModel)
 
   const { dirname: pipelineDirname } = await import("node:path")
@@ -1371,6 +1419,20 @@ Batch mode:
   const keepAllRounds = flags["no-keep-all-rounds"] !== "true" && flags["no-keep-all-rounds"] !== ""
   const autoApply = flags["auto-apply"] === "true" || flags["auto-apply"] === ""
   const concurrency = flags.concurrency ? parseInt(flags.concurrency, 10) : CLI_DEFAULTS.concurrency
+
+  {
+    const { printBanner, describeModelRoute, describeAdapter, shortenPath } = await import("./core/banner.ts")
+    const { SKVM_CACHE, JIT_OPTIMIZE_DIR } = await import("./core/config.ts")
+    printBanner("jit-optimize", [
+      ["Optimizer", describeModelRoute(optimizerModel)],
+      ["Target", `${describeModelRoute(tModel)} / ${describeAdapter(tHarness)}`],
+      ["Source", stripSuffix(taskSource.kind)],
+      ["Skill", skillDirs.length === 1 ? skillDirs[0]! : `${skillDirs.length} skills (batch)`],
+      ["Rounds", `${rounds} (runs-per-task=${runsPerTask})`],
+      ["Cache", shortenPath(SKVM_CACHE)],
+      ["Output", shortenPath(JIT_OPTIMIZE_DIR)],
+    ])
+  }
 
   const { jitOptimize } = await import("./jit-optimize/index.ts")
   const { acquireOptimizeLock, releaseOptimizeLock } = await import("./proposals/storage.ts")
