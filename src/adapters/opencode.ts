@@ -278,7 +278,7 @@ export function toOpenCodeModel(model: string): string {
 export class OpenCodeAdapter implements AgentAdapter {
   readonly name = "opencode"
   private model = ""
-  private timeoutMs = TASK_FILE_DEFAULTS.timeoutMs
+  private timeoutMs: number = TASK_FILE_DEFAULTS.timeoutMs
   private cmdPrefix: string[] = []
   private envOverlay: Record<string, string> = {}
 

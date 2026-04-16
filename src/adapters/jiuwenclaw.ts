@@ -288,7 +288,7 @@ export class JiuwenClawAdapter implements AgentAdapter {
   readonly name = "jiuwenclaw"
   private model = ""
   private apiKey: string | undefined
-  private timeoutMs = TASK_FILE_DEFAULTS.timeoutMs
+  private timeoutMs: number = TASK_FILE_DEFAULTS.timeoutMs
   private cmdPrefix: string[] = []
   private repoDir: string | undefined
   private sidecar: ReturnType<typeof Bun.spawn> | undefined

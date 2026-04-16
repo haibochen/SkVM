@@ -656,7 +656,7 @@ const openclawPool = new OpenClawPool()
 export class OpenClawAdapter implements AgentAdapter {
   readonly name = "openclaw"
   private model = ""
-  private timeoutMs = TASK_FILE_DEFAULTS.timeoutMs
+  private timeoutMs: number = TASK_FILE_DEFAULTS.timeoutMs
 
   async setup(config: AdapterConfig): Promise<void> {
     this.model = config.model

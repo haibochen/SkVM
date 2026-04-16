@@ -208,8 +208,8 @@ export async function resolveHermesCmd(): Promise<string[]> {
 export class HermesAdapter implements AgentAdapter {
   readonly name = "hermes"
   private model = ""
-  private maxSteps = TASK_FILE_DEFAULTS.maxSteps
-  private timeoutMs = TASK_FILE_DEFAULTS.timeoutMs
+  private maxSteps: number = TASK_FILE_DEFAULTS.maxSteps
+  private timeoutMs: number = TASK_FILE_DEFAULTS.timeoutMs
   private cmdPrefix: string[] = []
   private repoDir: string | undefined
 

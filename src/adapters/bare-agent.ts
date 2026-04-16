@@ -120,8 +120,8 @@ export class BareAgentAdapter implements AgentAdapter {
   readonly name = "bare-agent"
   private provider!: LLMProvider
   private model = ""
-  private maxSteps = TASK_FILE_DEFAULTS.maxSteps
-  private timeoutMs = TASK_FILE_DEFAULTS.timeoutMs
+  private maxSteps: number = TASK_FILE_DEFAULTS.maxSteps
+  private timeoutMs: number = TASK_FILE_DEFAULTS.timeoutMs
   private hooks: RuntimeHooks = {}
 
   constructor(
