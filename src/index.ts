@@ -441,7 +441,7 @@ Options:
   --model=<id,...>      Target model(s), comma-separated (required)
   --adapter=<name,...>  Harness name(s), comma-separated (${ALL_ADAPTERS.join(" | ")}; default: ${CLI_DEFAULTS.adapter})
   --profile=<path>      Path to TCP JSON (single-job only; default: load from cache)
-  --pass=1,2,3          Which passes to run (default: 1,2,3)
+  --pass=<list>         Which passes to run, comma-separated (default: ${CLI_DEFAULTS.compilerPasses.join(",")})
   --concurrency=<n>     Parallel compilations (default: ${CLI_DEFAULTS.concurrency})
   --dry-run             Show plan without applying
   --compiler-model=<id> Compiler model via OpenRouter (default: ${MODEL_DEFAULTS.compiler})`)
@@ -458,7 +458,7 @@ Options:
   const adapters = (flags.adapter ?? CLI_DEFAULTS.adapter).split(",").map(a => a.trim())
   const passes: number[] = flags.pass
     ? flags.pass.split(",").map(p => Number(p.trim()))
-    : [1, 2, 3]
+    : [...CLI_DEFAULTS.compilerPasses]
   const concurrency = flags.concurrency ? parseInt(flags.concurrency) : CLI_DEFAULTS.concurrency
   const dryRun = flags["dry-run"] === "true"
 
@@ -648,7 +648,7 @@ Options:
   --adapter=<name>        Harness: ${ALL_ADAPTERS.join(" | ")} (default: ${CLI_DEFAULTS.adapter})
   --force-profile         Re-profile even if cached
   --profile=<path>        Use specific TCP file (skip auto-profiling)
-  --pass=1,2,3            Compiler passes (default: 1,2,3)
+  --pass=<list>           Compiler passes, comma-separated (default: ${CLI_DEFAULTS.compilerPasses.join(",")})
   --compiler-model=<id>   Compiler model via OpenRouter (default: ${MODEL_DEFAULTS.compiler})
   --dry-run               Show compilation plan without writing`)
     process.exit(0)
@@ -668,7 +668,7 @@ Options:
   }
   const harness: AdapterName = harnessStr
 
-  const passes = flags.pass ? flags.pass.split(",").map(Number) : [1, 2, 3]
+  const passes = flags.pass ? flags.pass.split(",").map(Number) : [...CLI_DEFAULTS.compilerPasses]
 
   const { RunSession, shortModel: shortModelName } = await import("./core/run-session.ts")
   const { getCompileLogDir } = await import("./core/config.ts")

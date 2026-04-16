@@ -41,9 +41,13 @@ The installer drops a standalone binary at `~/.local/share/skvm/bin/skvm` (symli
 **Agent-facing skills** ship inside the install. Copy them into your agent harness's skills directory to teach it how to drive skvm:
 
 ```bash
-# Claude Code
-cp -r ~/.local/share/skvm/skills/skvm-jit ~/.claude/skills/
-cp -r ~/.local/share/skvm/skills/skvm-general ~/.claude/skills/
+# OpenClaw
+cp -r ~/.local/share/skvm/skills/skvm-jit ~/.openclaw/workspace/skills/
+cp -r ~/.local/share/skvm/skills/skvm-general ~/.openclaw/workspace/skills/
+
+# Hermes Agent
+cp -r ~/.local/share/skvm/skills/skvm-jit ~/.hermes/skills/
+cp -r ~/.local/share/skvm/skills/skvm-general ~/.hermes/skills/
 ```
 
 - `skvm-jit` — post-task feedback loop for submitting conversation logs to `skvm jit-optimize`
@@ -66,28 +70,23 @@ Writes a target capability profile to `~/.skvm/profiles/`.
 ```bash
 skvm profile \
   --model=qwen/qwen3.5-35b-a3b \
-  --adapter=openclaw \
-  --instances=3 \
-  --concurrency=1
+  --adapter=bare-agent
 ```
-
-Defaults shown: `--adapter=bare-agent` (overridden to `openclaw` above), `--instances=3`, `--concurrency=1`.
 
 ### 2. Compile a skill against that profile
 
-The compiler rewrites the skill to match the target's capabilities.
+The compiler rewrites the skill to match the target's capabilities. A cached profile for the same `--model` + `--adapter` pair must exist (run `skvm profile` first, or use `skvm pipeline` which profiles automatically).
 
 ```bash
 skvm aot-compile \
   --skill=path/to/skill-dir \
   --model=qwen/qwen3.5-35b-a3b \
   --adapter=bare-agent \
-  --pass=1,2,3 \
-  --concurrency=1 \
+  --pass=1 \
   --compiler-model=anthropic/claude-sonnet-4.6
 ```
 
-Defaults shown: `--adapter=bare-agent`, `--pass=1,2,3`, `--concurrency=1`, `--compiler-model=anthropic/claude-sonnet-4.6`.
+Compiled variants are written under `~/.skvm/proposals/aot-compile/<adapter>/<safeModel>/<skillName>/<passTag>/` by default. 
 
 ### 3. Autotune the skill with synthetic tasks
 
@@ -97,18 +96,13 @@ The optimizer LLM derives tasks from the skill itself, then loops edit → rerun
 skvm jit-optimize \
   --skill=path/to/skill-dir \
   --task-source=synthetic \
-  --optimizer-model=anthropic/claude-sonnet-4.6 \
-  --target-model=qwen/qwen3.5-35b-a3b \
   --target-adapter=bare-agent \
-  --synthetic-count=3 \
-  --synthetic-test-count=2 \
-  --rounds=3 \
-  --runs-per-task=2 \
-  --task-concurrency=1 \
-  --convergence=0.95
+  --optimizer-model=anthropic/claude-sonnet-4.6 \
+  --rounds=2 \
+  --target-model=qwen/qwen3.5-35b-a3b
 ```
 
-Defaults shown: `--target-adapter=bare-agent`, `--synthetic-count=3`, `--synthetic-test-count=2`, `--rounds=3`, `--runs-per-task=2`, `--task-concurrency=1`, `--convergence=0.95`.
+Results are written under `~/.skvm/proposals/jit-optimize/<adapter>/<safeTargetModel>/<skillName>/<timestamp>/` by default. 
 
 ### 4. Optimize from an existing conversation log
 
@@ -118,24 +112,20 @@ No rerun, just diagnose and edit. Good for post-mortems and for the `skvm-jit` p
 skvm jit-optimize \
   --skill=path/to/skill-dir \
   --task-source=log \
+  --target-adapter=bare-agent \
   --logs=path/to/session.jsonl \
   --optimizer-model=anthropic/claude-sonnet-4.6 \
-  --target-model=qwen/qwen3.5-35b-a3b \
-  --target-adapter=bare-agent \
-  --rounds=1
+  --target-model=qwen/qwen3.5-35b-a3b
 ```
-
-Defaults shown: `--target-adapter=bare-agent`, `--rounds=1` (log mode defaults to 1 round; `--runs-per-task`, `--convergence`, `--baseline` are forbidden for log).
 
 ### Review, accept, or reject the proposal
 
 ```bash
-skvm proposals list --sort=recent
-skvm proposals show <id>
-skvm proposals accept <id>
+skvm proposals list        # CLI listing
+skvm proposals show <id>   # CLI detail view
+skvm proposals accept <id> # CLI accept
+skvm proposals serve       # Web review UI
 ```
-
-Defaults shown: `--sort=recent` (other sort keys: `delta`, `skill`, `model`).
 
 ## Configuration
 
@@ -154,6 +144,39 @@ The cache is user-global and shared across every directory you invoke `skvm` fro
 - `SKVM_CACHE` env var (persistent), e.g. `export SKVM_CACHE=/mnt/fast/skvm`
 
 Individual subdirectories can also be pointed elsewhere with `SKVM_PROFILES_DIR`, `SKVM_LOGS_DIR`, and `SKVM_PROPOSALS_DIR`.
+
+## Dataset: skvm-data
+
+The benchmark skills, tasks, and pre-built profiles live in a separate Git submodule ([SJTU-IPADS/SkVM-data](https://github.com/SJTU-IPADS/SkVM-data)). Clone it if you plan to run `skvm bench` and want to use the bundled skills/tasks directly:
+
+```bash
+git submodule update --init   # or: git clone --recurse-submodules
+```
+
+This populates the `skvm-data/` directory:
+
+```
+skvm-data/
+├── skills/     # 108 skill directories (each contains a SKILL.md)
+├── tasks/      # 216 task directories (each contains a task.json)
+└── profiles/   # Pre-built target capability profiles
+    ├── bare-agent/
+    └── openclaw/
+```
+
+`skvm bench` resolves skills and tasks from `skvm-data/` by default. Override the location via:
+
+- `--skvm-data-dir=<path>` flag (one-off)
+- `SKVM_DATA_DIR` env var (persistent)
+
+Commands that take an explicit `--skill=<path>` or `--task=<path>` do not need the submodule — they work with any directory on disk.
+
+If you want to use the pre-built profiles from `skvm-data/`, copy `skvm-data/profiles/` into your profile cache directory (default: `~/.skvm/profiles/`, or `SKVM_PROFILES_DIR` if set).
+
+```bash
+mkdir -p ~/.skvm/profiles
+cp -R skvm-data/profiles/. ~/.skvm/profiles/
+```
 
 ## Learn more
 
