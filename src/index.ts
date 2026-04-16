@@ -1,8 +1,10 @@
 #!/usr/bin/env bun
 
 import "./core/env-bootstrap.ts"
-import { setLogLevel, createLogger } from "./core/logger.ts"
+import { setLogLevel, createLogger, c, shouldUseColor } from "./core/logger.ts"
 import { ALL_ADAPTERS, type AdapterName, createAdapter, isAdapterName } from "./adapters/registry.ts"
+
+const noColor = (s: string) => s
 import { CLI_DEFAULTS, MODEL_DEFAULTS } from "./core/ui-defaults.ts"
 import pkgJson from "../package.json" with { type: "json" }
 
@@ -95,7 +97,7 @@ Use --help with any command for details.`)
       await runLogs(flags)
       break
     default:
-      console.error(`Unknown command: ${command}`)
+      console.error(c.red(`Unknown command: ${command}`))
       process.exit(1)
   }
 
@@ -108,14 +110,13 @@ function printProfileSummary(tcp: import("./core/types.ts").TCP) {
   console.log(`Duration: ${(tcp.cost.durationMs / 1000).toFixed(1)}s`)
   console.log(`\nCapabilities:`)
 
-  const levelColors: Record<string, string> = {
-    L0: "\x1b[31m", L1: "\x1b[33m", L2: "\x1b[36m", L3: "\x1b[32m",
+  const levelColors: Record<string, (s: string) => string> = {
+    L0: c.red, L1: c.yellow, L2: c.cyan, L3: c.green,
   }
-  const reset = "\x1b[0m"
 
   for (const [id, level] of Object.entries(tcp.capabilities).sort()) {
-    const color = levelColors[level] ?? ""
-    console.log(`  ${id.padEnd(25)} ${color}${level}${reset}`)
+    const colorFn = levelColors[level] ?? noColor
+    console.log(`  ${id.padEnd(25)} ${colorFn(level)}`)
   }
 }
 
@@ -276,7 +277,7 @@ Options:
       await session.complete(`${job.model} profiled`)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`${job.model} -- ${job.harness}: FAILED: ${msg}`)
+      console.error(c.red(`${job.model} -- ${job.harness}: FAILED: ${msg}`))
       await session.fail(msg)
     }
     return
@@ -432,7 +433,7 @@ Notes:
     // and no warning that the budget was violated. (`skvm run` doesn't go
     // through the bench runner gate, so this is the only place to flag it.)
     if (result.runResult.runStatus !== "ok") {
-      console.log(`⚠ runStatus: ${result.runResult.runStatus}`)
+      console.log(c.yellow(`⚠ runStatus: ${result.runResult.runStatus}`))
       if (result.runResult.statusDetail) {
         console.log(`  ${result.runResult.statusDetail}`)
       }
@@ -446,7 +447,7 @@ Notes:
     await runSession.complete(`${task.id}, ${(result.runResult.durationMs / 1000).toFixed(1)}s`)
   } catch (err) {
     await runSession.fail(err instanceof Error ? err.message : String(err))
-    console.error(`Run failed: ${err}`)
+    console.error(c.red(`Run failed: ${err}`))
     process.exit(1)
   }
 }
@@ -639,7 +640,7 @@ Options:
     } catch (err) {
       completed++
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`  [${completed}/${jobs.length}] ${job.skill.name} × ${job.model} × ${job.adapter}: FAILED: ${msg.slice(0, 200)}`)
+      console.error(c.red(`  [${completed}/${jobs.length}] ${job.skill.name} × ${job.model} × ${job.adapter}: FAILED: ${msg.slice(0, 200)}`))
       results.push({
         skill: job.skill.name, model: job.model, adapter: job.adapter,
         gaps: 0, guard: false, durationMs: 0, error: msg,
@@ -1067,9 +1068,13 @@ Options:
 
   console.log(`\nRecent runs${flags.type ? ` (type: ${flags.type})` : ""}:\n`)
 
+  const statusColor: Record<string, (s: string) => string> = {
+    COMPLETED: c.green, FAILED: c.red, RUNNING: c.yellow,
+  }
   for (const e of entries) {
-    const status = e.status.toUpperCase().padEnd(10)
-    console.log(`  ${status} ${e.id}`)
+    const label = e.status.toUpperCase().padEnd(10)
+    const colorFn = statusColor[label.trim()] ?? noColor
+    console.log(`  ${colorFn(label)} ${e.id}`)
 
     const details: string[] = []
     details.push(`Type: ${e.type}`)
@@ -1137,7 +1142,7 @@ Proposals root: $SKVM_PROPOSALS_DIR or ~/.skvm/proposals by default.`)
     }
     const {
       buildRow, sortRows, filterByMinDelta, renderTable,
-      aggregate, renderGroupTable, shouldUseColor,
+      aggregate, renderGroupTable,
     } = await import("./proposals/list-format.ts")
     const color = shouldUseColor({ noColor: flags["no-color"] === "true" })
 
@@ -1171,7 +1176,7 @@ Proposals root: $SKVM_PROPOSALS_DIR or ~/.skvm/proposals by default.`)
     const id = positional[0]
     if (!id) { console.error("Usage: skvm proposals show <id>"); process.exit(1) }
     const p = await loadProposal(id)
-    const { shouldUseColor, renderShowSummary } = await import("./proposals/list-format.ts")
+    const { renderShowSummary } = await import("./proposals/list-format.ts")
     const color = shouldUseColor({ noColor: flags["no-color"] === "true" })
     console.log(`# ${id}`)
     console.log(`status: ${p.meta.status}`)
@@ -1495,7 +1500,7 @@ Batch mode:
       }
     } catch (err) {
       results.push({ skillDir, skillName, error: `${err}` })
-      console.error(`[${skillName}] failed: ${err}`)
+      console.error(c.red(`[${skillName}] failed: ${err}`))
     } finally {
       pool.release(slot)
     }
@@ -1516,7 +1521,7 @@ Batch mode:
       const deltaStr = delta === null ? "" : ` (Δ ${delta >= 0 ? "+" : ""}${delta.toFixed(3)})`
       console.log(`  ${r.skillName}: best=round-${r.result.bestRound}${deltaStr}  ${r.result.proposalDir}`)
     } else {
-      console.log(`  ${r.skillName}: FAILED — ${r.error}`)
+      console.log(c.red(`  ${r.skillName}: FAILED — ${r.error}`))
     }
   }
 }

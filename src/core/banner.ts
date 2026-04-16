@@ -6,11 +6,8 @@
 
 import { getProvidersConfig, getAdapterRepoDir } from "./config.ts"
 import { findMatchingRoute } from "../providers/registry.ts"
+import { c } from "./logger.ts"
 import pkgJson from "../../package.json" with { type: "json" }
-
-const useColor = !process.env.NO_COLOR && process.stdout?.isTTY !== false
-const dim = useColor ? "\x1b[2m" : ""
-const reset = useColor ? "\x1b[0m" : ""
 
 const HOME = process.env.HOME ?? ""
 
@@ -26,19 +23,19 @@ export function describeModelRoute(modelId: string): string {
   const route = findMatchingRoute(modelId, config)
   if (route) {
     if (route.kind === "openai-compatible" && route.baseUrl) {
-      return `${modelId} ${dim}via ${route.kind} (${route.baseUrl})${reset}`
+      return `${modelId} ${c.dim(`via ${route.kind} (${route.baseUrl})`)}`
     }
-    return `${modelId} ${dim}via ${route.kind}${reset}`
+    return `${modelId} ${c.dim(`via ${route.kind}`)}`
   }
-  return `${modelId} ${dim}via openrouter (default fallback)${reset}`
+  return `${modelId} ${c.dim("via openrouter (default fallback)")}`
 }
 
 /** Human-readable label for an adapter and its binary source. */
 export function describeAdapter(name: string): string {
-  if (name === "bare-agent") return `${name} ${dim}(built-in)${reset}`
+  if (name === "bare-agent") return `${name} ${c.dim("(built-in)")}`
   const repoDir = getAdapterRepoDir(name as "opencode" | "openclaw" | "hermes" | "jiuwenclaw")
-  if (repoDir) return `${name} ${dim}(${shortenPath(repoDir)})${reset}`
-  return `${name} ${dim}(not configured)${reset}`
+  if (repoDir) return `${name} ${c.dim(`(${shortenPath(repoDir)})`)}`
+  return `${name} ${c.dim("(not configured)")}`
 }
 
 /**

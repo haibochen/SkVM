@@ -1,5 +1,46 @@
 import { appendFileSync } from "node:fs"
 
+// ---------------------------------------------------------------------------
+// Color utilities
+// ---------------------------------------------------------------------------
+
+export const useColor = !process.env.NO_COLOR && process.stdout?.isTTY !== false
+
+/** Raw ANSI escape codes — use for conditional paint(s, code, flag) patterns. */
+export const ANSI = {
+  reset: "\x1b[0m",
+  bold: "\x1b[1m",
+  dim: "\x1b[2m",
+  red: "\x1b[31m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  cyan: "\x1b[36m",
+  gray: "\x1b[90m",
+}
+
+/** Wrap a string with color — respects NO_COLOR and TTY detection. */
+const wrap = (code: string) => (s: string) => useColor ? `${code}${s}${ANSI.reset}` : s
+
+export const c = {
+  red:    wrap(ANSI.red),
+  yellow: wrap(ANSI.yellow),
+  green:  wrap(ANSI.green),
+  cyan:   wrap(ANSI.cyan),
+  dim:    wrap(ANSI.dim),
+  bold:   wrap(ANSI.bold),
+  gray:   wrap(ANSI.gray),
+}
+
+/** Check color support, with an optional --no-color flag override. */
+export function shouldUseColor(flag?: { noColor?: boolean }): boolean {
+  if (flag?.noColor) return false
+  return useColor
+}
+
+// ---------------------------------------------------------------------------
+// Logger
+// ---------------------------------------------------------------------------
+
 type LogLevel = "debug" | "info" | "warn" | "error"
 
 const LEVEL_PRIORITY: Record<LogLevel, number> = {
@@ -7,6 +48,13 @@ const LEVEL_PRIORITY: Record<LogLevel, number> = {
   info: 1,
   warn: 2,
   error: 3,
+}
+
+const LEVEL_COLOR: Record<LogLevel, (s: string) => string> = {
+  debug: c.gray,
+  info: c.cyan,
+  warn: c.yellow,
+  error: c.red,
 }
 
 let currentLevel: LogLevel = "info"
@@ -21,7 +69,8 @@ function shouldLog(level: LogLevel): boolean {
 
 export function formatLogMsg(level: LogLevel, component: string, msg: string): string {
   const ts = new Date().toISOString().slice(11, 23)
-  return `${ts} [${level.toUpperCase().padEnd(5)}] [${component}] ${msg}`
+  const colorFn = LEVEL_COLOR[level]
+  return `${c.dim(ts)} ${colorFn(`[${level.toUpperCase().padEnd(5)}]`)} ${c.dim(`[${component}]`)} ${msg}`
 }
 
 /** Append a line to a log file (no-op if path is null). */

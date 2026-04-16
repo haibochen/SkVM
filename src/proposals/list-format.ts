@@ -11,6 +11,7 @@
 import type { LoadedProposal } from "./storage.ts"
 import { summarizeProposal } from "./summary.ts"
 import type { ProposalSummaryView } from "./summary.ts"
+import { ANSI } from "../core/logger.ts"
 
 export interface ListRow {
   id: string
@@ -72,22 +73,6 @@ export function filterByMinDelta(rows: ListRow[], min: number): ListRow[] {
 // Formatting
 // ---------------------------------------------------------------------------
 
-const ANSI = {
-  reset: "\x1b[0m",
-  bold: "\x1b[1m",
-  dim: "\x1b[2m",
-  red: "\x1b[31m",
-  green: "\x1b[32m",
-  yellow: "\x1b[33m",
-  cyan: "\x1b[36m",
-  gray: "\x1b[90m",
-}
-
-export function shouldUseColor(flag: { noColor?: boolean }): boolean {
-  if (flag.noColor) return false
-  if (process.env.NO_COLOR) return false
-  return Boolean(process.stdout.isTTY)
-}
 
 function paint(s: string, code: string, color: boolean): string {
   return color ? `${code}${s}${ANSI.reset}` : s
