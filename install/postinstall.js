@@ -65,6 +65,27 @@ const version = pkg.version
 const owner = host.owner
 const repo = host.repo
 
+// ---------------- download sources (auto-fallback) ----------------
+// Tried in order. On any network error / timeout / stall, we silently roll
+// over to the next source — no env var or user action required. This is how
+// mainland-China users get the install to succeed when github.com is flaky.
+//
+// Optional override (advanced): SKVM_DOWNLOAD_BASE=github|mirror|<custom-url>
+const sources = resolveSources(host)
+
+function resolveSources(host) {
+  const override = process.env.SKVM_DOWNLOAD_BASE
+  if (!override) return host.sources
+  if (override === "github") return host.sources.filter((s) => s.name === "github")
+  if (override === "mirror" || override === "cn")
+    return host.sources.filter((s) => s.name !== "github")
+  if (/^https?:\/\//.test(override)) {
+    const base = override.replace(/\/+$/, "")
+    return [{ name: "custom", releases: `${base}/gh`, api: `${base}/gh-api` }]
+  }
+  return host.sources
+}
+
 // ---------------- download ----------------
 const binDir = path.join(pkgRoot, "bin")
 mkdirSync(binDir, { recursive: true })
@@ -72,25 +93,42 @@ const tmpDir = path.join(os.tmpdir(), `skvm-postinstall-${process.pid}`)
 mkdirSync(tmpDir, { recursive: true })
 
 const tarballName = `skvm-v${version}-${target}.tar.gz`
-const tarballUrl = `https://github.com/${owner}/${repo}/releases/download/v${version}/${tarballName}`
-const sumUrl = `${tarballUrl}.sha256`
+const tarballRel = `/${owner}/${repo}/releases/download/v${version}/${tarballName}`
 const tmpTarball = path.join(tmpDir, tarballName)
+
+// Timeouts (important for CN ↔ GitHub): short connect so we fall back fast,
+// longer idle so slow but working mirrors still complete.
+const CONNECT_TIMEOUT_MS = 8_000
+const IDLE_TIMEOUT_MS = 30_000
 
 function fetchToFile(url, destPath) {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, { headers: { "user-agent": "skvm-postinstall" } }, (res) => {
-      if (res.statusCode === 301 || res.statusCode === 302) {
-        resolve(fetchToFile(res.headers.location, destPath))
-        return
-      }
-      if (res.statusCode !== 200) {
-        reject(new Error(`GET ${url} → ${res.statusCode}`))
-        return
-      }
-      const file = createWriteStream(destPath)
-      res.pipe(file)
-      file.on("finish", () => file.close(() => resolve()))
-      file.on("error", reject)
+    const req = https.get(
+      url,
+      { headers: { "user-agent": "skvm-postinstall" }, timeout: CONNECT_TIMEOUT_MS },
+      (res) => {
+        req.setTimeout(0)
+        if (res.statusCode === 301 || res.statusCode === 302) {
+          res.resume()
+          resolve(fetchToFile(res.headers.location, destPath))
+          return
+        }
+        if (res.statusCode !== 200) {
+          res.resume()
+          reject(new Error(`GET ${url} → ${res.statusCode}`))
+          return
+        }
+        res.setTimeout(IDLE_TIMEOUT_MS, () => {
+          req.destroy(new Error(`idle timeout: ${url}`))
+        })
+        const file = createWriteStream(destPath)
+        res.pipe(file)
+        file.on("finish", () => file.close(() => resolve()))
+        file.on("error", reject)
+      },
+    )
+    req.on("timeout", () => {
+      req.destroy(new Error(`connect timeout (${CONNECT_TIMEOUT_MS}ms): ${url}`))
     })
     req.on("error", reject)
   })
@@ -98,28 +136,71 @@ function fetchToFile(url, destPath) {
 
 function fetchText(url) {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, { headers: { "user-agent": "skvm-postinstall" } }, (res) => {
-      if (res.statusCode === 301 || res.statusCode === 302) {
-        resolve(fetchText(res.headers.location))
-        return
-      }
-      if (res.statusCode !== 200) {
-        reject(new Error(`GET ${url} → ${res.statusCode}`))
-        return
-      }
-      let body = ""
-      res.on("data", (chunk) => (body += chunk))
-      res.on("end", () => resolve(body))
+    const req = https.get(
+      url,
+      { headers: { "user-agent": "skvm-postinstall" }, timeout: CONNECT_TIMEOUT_MS },
+      (res) => {
+        req.setTimeout(0)
+        if (res.statusCode === 301 || res.statusCode === 302) {
+          res.resume()
+          resolve(fetchText(res.headers.location))
+          return
+        }
+        if (res.statusCode !== 200) {
+          res.resume()
+          reject(new Error(`GET ${url} → ${res.statusCode}`))
+          return
+        }
+        res.setTimeout(IDLE_TIMEOUT_MS, () => {
+          req.destroy(new Error(`idle timeout: ${url}`))
+        })
+        let body = ""
+        res.on("data", (chunk) => (body += chunk))
+        res.on("end", () => resolve(body))
+      },
+    )
+    req.on("timeout", () => {
+      req.destroy(new Error(`connect timeout (${CONNECT_TIMEOUT_MS}ms): ${url}`))
     })
     req.on("error", reject)
   })
 }
 
+// Walk the sources list; first success wins. `kind` is "releases" or "api".
+// `relPath` must start with "/". When `destPath` is provided, body is streamed
+// there; otherwise the text body is returned.
+async function fetchWithFallback(kind, relPath, destPath = null) {
+  let lastErr
+  for (const src of sources) {
+    const base = src[kind]
+    if (!base) continue
+    const url = base + relPath
+    try {
+      console.log(`skvm postinstall: fetching ${url}`)
+      if (destPath) {
+        await fetchToFile(url, destPath)
+        return
+      }
+      return await fetchText(url)
+    } catch (err) {
+      lastErr = err
+      console.warn(`  [${src.name}] ${err.message}; trying next source…`)
+    }
+  }
+  throw lastErr || new Error(`all sources failed for ${relPath}`)
+}
+
 console.log(`skvm postinstall: downloading ${tarballName}…`)
 try {
-  await fetchToFile(tarballUrl, tmpTarball)
+  await fetchWithFallback("releases", tarballRel, tmpTarball)
 
-  const expectedSum = (await fetchText(sumUrl)).trim().split(/\s+/)[0]
+  let expectedSum = null
+  try {
+    const sumBody = await fetchWithFallback("releases", `${tarballRel}.sha256`)
+    expectedSum = sumBody.trim().split(/\s+/)[0] || null
+  } catch (err) {
+    console.warn(`skvm postinstall: no checksum available (${err.message}); skipping verification`)
+  }
   const actualSum = createHash("sha256").update(readFileSync(tmpTarball)).digest("hex")
   if (expectedSum && expectedSum !== actualSum) {
     throw new Error(`sha256 mismatch: expected ${expectedSum}, got ${actualSum}`)
@@ -140,9 +221,11 @@ try {
   console.log(`skvm postinstall: installed skvm v${version} for ${target}`)
 } catch (err) {
   console.error(`skvm postinstall: ${err.message}`)
+  const hosts = sources.map((s) => s.name).join(", ")
   console.error(
-    `If you are behind a proxy or air-gapped, re-run with SKVM_SKIP_POSTINSTALL=1 ` +
-      `and install the binary manually from https://github.com/${owner}/${repo}/releases`,
+    `All download sources failed (${hosts}). If you are behind a proxy or air-gapped, ` +
+      `re-run with SKVM_SKIP_POSTINSTALL=1 and install the binary manually from ` +
+      `https://github.com/${owner}/${repo}/releases`,
   )
   process.exit(1)
 }
@@ -172,7 +255,7 @@ async function installOpencode() {
   }
   const ocAssetName = assetDef.name
   const ocFormat = assetDef.format
-  const ocUrl = `https://github.com/${ocOwner}/${ocRepo}/releases/download/${ocTag}/${ocAssetName}`
+  const ocRel = `/${ocOwner}/${ocRepo}/releases/download/${ocTag}/${ocAssetName}`
   const vendorRoot = path.join(pkgRoot, "vendor", "opencode")
   const versionDir = path.join(vendorRoot, ocTag)
   const profileRoot = path.join(vendorRoot, "profile")
@@ -187,7 +270,7 @@ async function installOpencode() {
     console.log(`skvm postinstall: downloading bundled opencode ${ocTag}`)
     mkdirSync(versionDir, { recursive: true })
     const ocTmp = path.join(tmpDir, ocAssetName)
-    await fetchToFile(ocUrl, ocTmp)
+    await fetchWithFallback("releases", ocRel, ocTmp)
 
     const expected = oc.sha256?.[target]
     if (expected) {

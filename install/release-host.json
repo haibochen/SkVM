@@ -1,5 +1,17 @@
 {
   "owner": "SJTU-IPADS",
   "repo": "SkVM",
-  "comment": "Single source of truth for the public release host. install.sh and postinstall.js both read this."
+  "sources": [
+    {
+      "name": "github",
+      "releases": "https://github.com",
+      "api": "https://api.github.com"
+    },
+    {
+      "name": "skillvm",
+      "releases": "https://skillvm.ai/gh",
+      "api": "https://skillvm.ai/gh-api"
+    }
+  ],
+  "comment": "Download sources tried in order during install. The first source that responds within the connect timeout wins; on failure the installer automatically falls back to the next. No user action required. install.sh hard-codes the same list (keep in sync); postinstall.js reads this file. The skillvm.ai mirror must expose: <releases>/<owner>/<repo>/releases/download/<tag>/<asset> and <api>/repos/<owner>/<repo>/releases/latest (static JSON with at least tag_name)."
 }

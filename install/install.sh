@@ -19,6 +19,76 @@ set -eu
 RELEASE_OWNER="SJTU-IPADS"
 RELEASE_REPO="SkVM"
 
+# ------------ download sources (auto-fallback) ------------
+# The installer tries each base in order. If GitHub is unreachable or stalls
+# (common from mainland China), the script silently falls back to the
+# skillvm.ai mirror — no env var or user action required.
+#
+# Keep this list in sync with install/release-host.json (postinstall.js uses it).
+# The mirror must mirror GitHub's path structure:
+#   <releases_base>/<owner>/<repo>/releases/download/<tag>/<asset>
+#   <api_base>/repos/<owner>/<repo>/releases/latest     (static JSON ok)
+SOURCE_RELEASES="https://github.com https://skillvm.ai/gh"
+SOURCE_API="https://api.github.com https://skillvm.ai/gh-api"
+
+# Optional override (advanced): SKVM_DOWNLOAD_BASE=github|mirror|<custom-url>
+case "${SKVM_DOWNLOAD_BASE:-}" in
+  "") ;;
+  github)
+    SOURCE_RELEASES="https://github.com"
+    SOURCE_API="https://api.github.com"
+    ;;
+  mirror|cn)
+    SOURCE_RELEASES="https://skillvm.ai/gh"
+    SOURCE_API="https://skillvm.ai/gh-api"
+    ;;
+  http*|https*)
+    _base="${SKVM_DOWNLOAD_BASE%/}"
+    SOURCE_RELEASES="${_base}/gh"
+    SOURCE_API="${_base}/gh-api"
+    ;;
+esac
+
+# fetch_with_fallback KIND REL_PATH [OUT_FILE]
+#   KIND: "releases" | "api"
+#   REL_PATH: path after the base (must start with "/")
+#   OUT_FILE: when provided, body is written there; otherwise echoed to stdout
+# Returns 0 on the first source that succeeds, non-zero if all sources fail.
+#
+# Timeout rationale (matters for CN ↔ GitHub):
+#   --connect-timeout 8   : fail fast if TCP can't establish
+#   --speed-time 15 / --speed-limit 1024 : abort stalled transfers (<1KB/s for 15s)
+#   --max-time 30 (text)  : bound small metadata fetches
+#   --retry 1 --retry-connrefused : one retry on the same URL before giving up
+fetch_with_fallback() {
+  _kind="$1"
+  _rel="$2"
+  _out="${3:-}"
+
+  case "$_kind" in
+    releases) _bases="$SOURCE_RELEASES" ;;
+    api)      _bases="$SOURCE_API"      ;;
+    *) echo "fetch_with_fallback: unknown kind $_kind" >&2; return 2 ;;
+  esac
+
+  for _base in $_bases; do
+    _u="${_base}${_rel}"
+    if [ -n "$_out" ]; then
+      if curl -fsSL --connect-timeout 8 --speed-time 15 --speed-limit 1024 \
+              --retry 1 --retry-connrefused "$_u" -o "$_out"; then
+        return 0
+      fi
+    else
+      if curl -fsSL --connect-timeout 8 --max-time 30 \
+              --retry 1 --retry-connrefused "$_u"; then
+        return 0
+      fi
+    fi
+    echo "skvm install.sh: ${_base} unreachable, trying next source..." >&2
+  done
+  return 1
+}
+
 # ------------ prefix ------------
 : "${SKVM_PREFIX:=${HOME}/.local/share/skvm}"
 : "${SKVM_BIN_DIR:=${HOME}/.local/bin}"
@@ -49,11 +119,14 @@ target="${os}-${arch}"
 
 # ------------ resolve version ------------
 if [ -z "${SKVM_VERSION:-}" ]; then
-  # latest → read release tag from GH API
-  latest_url="https://api.github.com/repos/${RELEASE_OWNER}/${RELEASE_REPO}/releases/latest"
-  tag=$(curl -fsSL "$latest_url" | sed -n 's/.*"tag_name":[ ]*"\([^"]*\)".*/\1/p' | head -n1)
+  latest_rel="/repos/${RELEASE_OWNER}/${RELEASE_REPO}/releases/latest"
+  latest_body=$(fetch_with_fallback api "$latest_rel") || {
+    echo "skvm install.sh: failed to resolve latest release from any source" >&2
+    exit 1
+  }
+  tag=$(echo "$latest_body" | sed -n 's/.*"tag_name":[ ]*"\([^"]*\)".*/\1/p' | head -n1)
   if [ -z "$tag" ]; then
-    echo "skvm install.sh: failed to resolve latest release from $latest_url" >&2
+    echo "skvm install.sh: failed to parse latest release tag" >&2
     exit 1
   fi
   SKVM_VERSION="$tag"
@@ -62,17 +135,19 @@ fi
 version="${SKVM_VERSION#v}"
 tag="v${version}"
 tarball_name="skvm-${tag}-${target}.tar.gz"
-tarball_url="https://github.com/${RELEASE_OWNER}/${RELEASE_REPO}/releases/download/${tag}/${tarball_name}"
-sum_url="${tarball_url}.sha256"
+tarball_rel="/${RELEASE_OWNER}/${RELEASE_REPO}/releases/download/${tag}/${tarball_name}"
 
 # ------------ download + verify ------------
 tmp_dir=$(mktemp -d -t skvm-install.XXXXXX)
 trap 'rm -rf "$tmp_dir"' EXIT
 
 echo "skvm install.sh: downloading ${tarball_name}"
-curl -fsSL "$tarball_url" -o "${tmp_dir}/${tarball_name}"
+fetch_with_fallback releases "$tarball_rel" "${tmp_dir}/${tarball_name}" || {
+  echo "skvm install.sh: failed to download ${tarball_name} from any source" >&2
+  exit 1
+}
 
-if curl -fsSL "$sum_url" -o "${tmp_dir}/${tarball_name}.sha256" 2>/dev/null; then
+if fetch_with_fallback releases "${tarball_rel}.sha256" "${tmp_dir}/${tarball_name}.sha256" 2>/dev/null; then
   expected=$(cut -d' ' -f1 < "${tmp_dir}/${tarball_name}.sha256")
   if command -v sha256sum >/dev/null 2>&1; then
     actual=$(sha256sum "${tmp_dir}/${tarball_name}" | cut -d' ' -f1)
@@ -87,7 +162,7 @@ if curl -fsSL "$sum_url" -o "${tmp_dir}/${tarball_name}.sha256" 2>/dev/null; the
     exit 1
   fi
 else
-  echo "skvm install.sh: no checksum published at $sum_url, skipping verification" >&2
+  echo "skvm install.sh: no checksum published for ${tarball_name}, skipping verification" >&2
 fi
 
 # ------------ extract ------------
@@ -134,7 +209,7 @@ install_opencode() {
   opencode_format="$2"
   opencode_expected_sum="$3"
 
-  opencode_url="https://github.com/${OPENCODE_OWNER}/${OPENCODE_REPO}/releases/download/${OPENCODE_VERSION}/${opencode_asset}"
+  opencode_rel="/${OPENCODE_OWNER}/${OPENCODE_REPO}/releases/download/${OPENCODE_VERSION}/${opencode_asset}"
   vendor_root="${SKVM_PREFIX}/vendor/opencode"
   version_dir="${vendor_root}/${OPENCODE_VERSION}"
   profile_root="${vendor_root}/profile"
@@ -145,8 +220,8 @@ install_opencode() {
     echo "skvm install.sh: downloading bundled opencode ${OPENCODE_VERSION}"
     mkdir -p "$version_dir"
     opencode_tmp="${tmp_dir}/${opencode_asset}"
-    if ! curl -fsSL "$opencode_url" -o "$opencode_tmp"; then
-      echo "skvm install.sh: failed to download $opencode_url" >&2
+    if ! fetch_with_fallback releases "$opencode_rel" "$opencode_tmp"; then
+      echo "skvm install.sh: failed to download opencode from any source" >&2
       echo "  Falling back to external opencode (global install or adapters.opencode)." >&2
       return 0
     fi
