@@ -28,6 +28,20 @@ SkVM is a compilation and runtime system that makes LLM agent skills portable ac
 
 Reference: **SkVM: Revisiting Language VM for Skills across Heterogenous LLMs and Harnesses** — https://arxiv.org/abs/2604.03088
 
+## Demo
+
+### SkVM Optimization: Skill Quality Comparison
+
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/b21132b5-a697-41b9-a802-476389bdb466"/>
+</div>
+
+### SkVM Accelerates Agent Execution
+
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/05636f9e-1d13-43c6-b82b-43af577fbf52"/>
+</div>
+
 ## Install
 
 ```bash

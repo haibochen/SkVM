@@ -28,6 +28,20 @@ SkVM 是一个面向 LLM Agent Skill 的编译与运行时系统，用来让 Ski
 
 参考论文：**SkVM: Revisiting Language VM for Skills across Heterogenous LLMs and Harnesses** — https://arxiv.org/abs/2604.03088
 
+## Demo
+
+### SkVM 优化 skill 质量对比
+
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/b21132b5-a697-41b9-a802-476389bdb466"/>
+</div>
+
+### SkVM 加速 Agent 执行
+
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/05636f9e-1d13-43c6-b82b-43af577fbf52"/>
+</div>
+
 ## 安装
 
 ```bash
