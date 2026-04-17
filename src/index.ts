@@ -1141,6 +1141,7 @@ Usage:
   skvm proposals serve   [--port=<n>] [--host=<h>] [--no-open]
   skvm proposals accept  <id> [--target=<dir>] [--round=<n>]
   skvm proposals reject  <id>
+  skvm proposals cancel  <id>   Stop a detached run still in phase=running
 
 Filters:
   --target-model=<id>   Filter by target model (the model the skill was tuned for).
@@ -1345,6 +1346,76 @@ Proposals root: $SKVM_PROPOSALS_DIR or ~/.skvm/proposals by default.`)
     if (!id) { console.error("Usage: skvm proposals reject <id>"); process.exit(1) }
     await updateStatus(id, "rejected")
     console.log(`Rejected ${id}`)
+    return
+  }
+
+  if (sub === "cancel") {
+    const id = positional[0]
+    if (!id) { console.error("Usage: skvm proposals cancel <id>"); process.exit(1) }
+    const proposalDir = proposalDirFromId(id)
+    const { readRunStatus, patchRunStatus } = await import("./jit-optimize/run-status.ts")
+    const { isPidAlive } = await import("./core/file-lock.ts")
+
+    const status = await readRunStatus(proposalDir)
+    if (status === null) {
+      console.error(`cancel: ${id} has no run-status.json (not a detached run)`)
+      process.exit(1)
+    }
+    if (status.phase !== "running") {
+      console.error(`cancel: ${id} is already in phase=${status.phase}, nothing to cancel`)
+      process.exit(1)
+    }
+
+    const pid = status.pid
+
+    if (!isPidAlive(pid)) {
+      await patchRunStatus(proposalDir, {
+        phase: "failed",
+        finishedAt: new Date().toISOString(),
+        error: `worker pid ${pid} was already dead at cancel time`,
+      })
+      console.log(`Cancelled ${id} (worker pid ${pid} was already dead; marked failed)`)
+      return
+    }
+
+    // SIGTERM so file-lock.ts's signal handler runs `releaseAllHeld` and
+    // unlinks the optimize lock before exit. If the worker is stuck in a
+    // blocking call that ignores SIGTERM, escalate to SIGKILL after 2s.
+    try {
+      process.kill(pid, "SIGTERM")
+    } catch (err) {
+      console.error(`cancel: failed to signal pid ${pid}: ${err}`)
+      process.exit(1)
+    }
+
+    const DEADLINE_MS = 3000
+    const KILL_ESCALATE_MS = 2000
+    const start = Date.now()
+    let escalated = false
+    let died = false
+    while (Date.now() - start < DEADLINE_MS) {
+      if (!isPidAlive(pid)) { died = true; break }
+      if (!escalated && Date.now() - start >= KILL_ESCALATE_MS) {
+        try { process.kill(pid, "SIGKILL") } catch { /* race — already dead */ }
+        escalated = true
+      }
+      await Bun.sleep(100)
+    }
+
+    if (!died) {
+      // Leave run-status at phase=running: a zombie worker may still
+      // complete and write its own terminal state, and we don't want to
+      // overwrite that with a lie.
+      console.error(`cancel: ${id} — pid ${pid} did not die within ${DEADLINE_MS / 1000}s; run-status unchanged, please investigate manually`)
+      process.exit(1)
+    }
+
+    await patchRunStatus(proposalDir, {
+      phase: "failed",
+      finishedAt: new Date().toISOString(),
+      error: `cancelled by user${escalated ? " (SIGKILL after SIGTERM timeout)" : ""}`,
+    })
+    console.log(`Cancelled ${id} (worker pid ${pid} stopped${escalated ? " via SIGKILL" : ""}; marked failed)`)
     return
   }
 
