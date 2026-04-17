@@ -31,14 +31,13 @@ SkVM 是一个面向 LLM Agent Skill 的编译与运行时系统，用来让 Ski
 ## 安装
 
 ```bash
-# 一键安装（macOS / Linux，任意架构）
+# 一键安装（macOS / Linux）
 curl -fsSL https://skillvm.ai/install.sh | sh
 
 # 或通过 npm（任意支持 Node >= 18 的平台；postinstall 会自动拉取对应平台的二进制）
 npm i -g @ipads-skvm/skvm
 
-# 然后设置 API Key 并验证
-export OPENROUTER_API_KEY=sk-or-...
+# 自检
 skvm --help
 ```
 

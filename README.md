@@ -31,14 +31,13 @@ Reference: **SkVM: Revisiting Language VM for Skills across Heterogenous LLMs an
 ## Install
 
 ```bash
-# curl one-liner (macOS / Linux, any arch)
+# curl one-liner (macOS / Linux)
 curl -fsSL https://skillvm.ai/install.sh | sh
 
 # or via npm (any platform with Node ≥ 18; postinstall fetches the matching binary)
 npm i -g @ipads-skvm/skvm
 
-# then set your API key and self-check
-export OPENROUTER_API_KEY=sk-or-...
+# self-check
 skvm --help
 ```
 
