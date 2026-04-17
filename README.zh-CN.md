@@ -100,6 +100,17 @@ export OPENROUTER_API_KEY=sk-or-...
 
 运行后会在 `~/.skvm/profiles/` 下生成对应的能力 Profile。
 
+如果你要使用的目标模型 + adapter 组合已经包含在 `skvm-data/profiles/` 提供的预构建 Profile 里，那么可以直接把这些缓存结果复制到本地 Profile 缓存目录中，跳过 `skvm profile`：
+
+```bash
+mkdir -p ~/.skvm/profiles
+cp -R skvm-data/profiles/. ~/.skvm/profiles/
+```
+
+当前仓库内已提供的预构建 Profile 组合如下：
+
+- 例如目前内置了 `qwen/qwen3.5-35b-a3b`、`deepseek/deepseek-v3.2`、`anthropic/claude-opus-4.6` 等目标的预构建 Profile。
+
 ```bash
 skvm profile \
   --model=qwen/qwen3.5-35b-a3b \
@@ -214,7 +225,7 @@ skvm-data/
 
 对于显式传入 `--skill=<path>` 或 `--task=<path>` 的命令，则不依赖这个子模块，可以直接使用磁盘上的任意目录。
 
-如果你想使用 `skvm-data/` 里预构建的 Profile，需要先把它们复制到本地 Profile 缓存目录中（默认是 `~/.skvm/profiles/`，也可以通过 `SKVM_PROFILES_DIR` 指定）：
+`skvm-data/profiles/` 已经包含了一部分模型 + adapter 组合的预构建 Profile。如果你需要的组合已经存在，那么只需要先把它们复制到本地 Profile 缓存目录中（默认是 `~/.skvm/profiles/`，也可以通过 `SKVM_PROFILES_DIR` 指定），就可以跳过该目标上的 `skvm profile`。当前内置组合可以参考上面“评测模型的原语能力”一节中的列表：
 
 ```bash
 mkdir -p ~/.skvm/profiles
