@@ -1,6 +1,6 @@
 ---
 name: skvm-general
-description: Drive the skvm CLI on behalf of a user to profile models, AOT-compile skills, run skill-assisted tasks, run benchmarks, and manage compiled proposals. Trigger when the user asks to "profile", "aot-compile", "bench", "run a skill", or asks about skvm proposals.
+description: Drive the skvm CLI on behalf of a user to profile models, AOT-compile skills, run skill-assisted tasks, run benchmarks, and manage compiled proposals. Trigger when the user asks to "profile", "aot-compile", "bench", "run a single ad-hoc task with a skill", or asks about skvm proposals. Do NOT trigger for `jit-optimize` or when the user wants to optimize/improve a skill — use the sibling `skvm-jit` skill instead.
 ---
 
 # SkVM General Usage
