@@ -462,6 +462,13 @@ export const HeadlessAgentConfigSchema = z.object({
   driver: HeadlessAgentDriverSchema.default(HEADLESS_AGENT_DEFAULTS.driver),
   modelPrefix: z.string().default(HEADLESS_AGENT_DEFAULTS.modelPrefix),
   /**
+   * Explicit opencode binary for the headless tuner (jit-optimize, jit-boost).
+   * Deliberately separate from `adapters.opencode` so the benchmark target and
+   * the internal tuner can diverge — adapters.opencode is "what we bench",
+   * this is "what drives tuning". Unset falls through to bundled → global.
+   */
+  opencodePath: z.string().optional(),
+  /**
    * When set, skvm injects OPENCODE_CONFIG_CONTENT into the opencode subprocess
    * to register a custom OpenAI-compatible provider. This avoids modifying the
    * user's global opencode config. The provider `name` must match the first

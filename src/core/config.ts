@@ -20,7 +20,7 @@ function findFlag(name: string): string | undefined {
   return undefined
 }
 
-function expandHome(p: string): string {
+export function expandHome(p: string): string {
   if (p.startsWith("~/")) return path.join(process.env.HOME ?? "", p.slice(2))
   return p
 }

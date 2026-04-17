@@ -3,7 +3,7 @@ import path from "node:path"
 import type { AgentAdapter, AdapterConfig, RunResult, AgentStep, ToolCall, TokenUsage, SkillMode } from "../core/types.ts"
 import { emptyTokenUsage } from "../core/types.ts"
 import { createLogger } from "../core/logger.ts"
-import { getAdapterRepoDir } from "../core/config.ts"
+import { getAdapterRepoDir, getHeadlessAgentConfig, expandHome } from "../core/config.ts"
 import { TASK_FILE_DEFAULTS } from "../core/ui-defaults.ts"
 
 const log = createLogger("opencode")
@@ -178,87 +178,152 @@ export interface OpenCodeResolution {
   env: Record<string, string>
 }
 
-/**
- * Compute the skvm install root when running as a compiled Bun binary. Returns
- * null when running via `bun run src/index.ts` (dev) or from a Node shim — in
- * those cases the bundled-opencode tier is skipped.
- *
- * The compiled binary lives at `<root>/bin/skvm`; resolve two-dirname-up.
- */
+// SKVM_INSTALL_ROOT is set by bin/skvm.js before spawning the compiled binary.
+// We need this because inside a Bun single-file executable, process.execPath
+// points at a virtual /$bunfs/... path — not the real on-disk package dir, so
+// deriving vendor/ location from it would silently miss. The execPath branch
+// is only reached when someone runs the compiled binary directly (no shim).
 function getSkvmInstallRoot(): string | null {
+  const fromEnv = process.env.SKVM_INSTALL_ROOT
+  if (fromEnv) return fromEnv
+
   const execPath = process.execPath
-  const base = path.basename(execPath)
-  if (base === "skvm") {
+  if (execPath.startsWith("/$bunfs")) return null
+  if (path.basename(execPath) === "skvm") {
     return path.dirname(path.dirname(execPath))
   }
   return null
 }
 
-/**
- * Resolve opencode CLI command. Priority:
- *   0. skvm-private bundled opencode at <install-root>/vendor/opencode/current/bin/opencode
- *      — isolated with XDG/HOME env overlay pointing at vendor/opencode/profile/
- *   1. Custom path from skvm.config.json → adapters.opencode
- *   2. Globally installed `opencode` via `which opencode`
- */
-export async function resolveOpenCodeCmd(): Promise<OpenCodeResolution> {
-  // 0. skvm-private bundled opencode (populated by install.sh / postinstall.js)
+// ---------------------------------------------------------------------------
+// Resolution tiers
+// ---------------------------------------------------------------------------
+//
+// Contract: a Tier returns a resolution+log or null (= not configured, try
+// next). Throwing means "configured but broken" — a user-visible error that
+// should short-circuit the chain rather than silently fall through to a
+// surprising alternative.
+
+type TierHit = { resolution: OpenCodeResolution; logLine: string }
+type Tier = () => Promise<TierHit | null>
+
+const INSTALL_HELP = "See https://skillvm.ai/install for setup."
+
+const tierBundled: Tier = async () => {
   const installRoot = getSkvmInstallRoot()
-  if (installRoot) {
-    const bundled = path.join(installRoot, "vendor", "opencode", "current", "bin", "opencode")
-    if (await Bun.file(bundled).exists()) {
-      const profileRoot = path.join(installRoot, "vendor", "opencode", "profile")
-      const env: Record<string, string> = {
-        XDG_CONFIG_HOME: path.join(profileRoot, "config"),
-        XDG_DATA_HOME: path.join(profileRoot, "data"),
-        XDG_STATE_HOME: path.join(profileRoot, "state"),
-        XDG_CACHE_HOME: path.join(profileRoot, "cache"),
-      }
-      log.info(`Using skvm-bundled opencode: ${bundled} (profile: ${profileRoot})`)
-      return { cmd: [bundled], env }
-    }
+  if (!installRoot) return null
+  const bundled = path.join(installRoot, "vendor", "opencode", "current", "bin", "opencode")
+  if (!(await Bun.file(bundled).exists())) return null
+  const profileRoot = path.join(installRoot, "vendor", "opencode", "profile")
+  const env: Record<string, string> = {
+    XDG_CONFIG_HOME: path.join(profileRoot, "config"),
+    XDG_DATA_HOME: path.join(profileRoot, "data"),
+    XDG_STATE_HOME: path.join(profileRoot, "state"),
+    XDG_CACHE_HOME: path.join(profileRoot, "cache"),
   }
+  return {
+    resolution: { cmd: [bundled], env },
+    logLine: `Using skvm-bundled opencode: ${bundled} (profile: ${profileRoot})`,
+  }
+}
 
-  // 1. Custom path from config
+// Throws if repoDir is set but neither src/index.ts nor a dist/ binary is
+// present — a misconfigured contributor checkout, not a "just fall through"
+// state. Prefers src so the upstream model registry stays current.
+const tierAdapterRepo: Tier = async () => {
   const repoDir = getAdapterRepoDir("opencode")
-  if (repoDir) {
-    const pkgDir = path.join(repoDir, "packages/opencode")
+  if (!repoDir) return null
+  const pkgDir = path.join(repoDir, "packages/opencode")
 
-    // Prefer source (always up-to-date with latest model registry)
-    const entryPoint = path.join(pkgDir, "src/index.ts")
-    if (await Bun.file(entryPoint).exists()) {
-      log.info(`Using opencode from source: ${repoDir}`)
-      return { cmd: ["bun", "run", "--cwd", pkgDir, "--conditions=browser", "src/index.ts", "--"], env: {} }
+  const entryPoint = path.join(pkgDir, "src/index.ts")
+  if (await Bun.file(entryPoint).exists()) {
+    return {
+      resolution: {
+        cmd: ["bun", "run", "--cwd", pkgDir, "--conditions=browser", "src/index.ts", "--"],
+        env: {},
+      },
+      logLine: `Using opencode from source: ${repoDir}`,
     }
-
-    // Fallback: compiled binary
-    const platformMap: Record<string, string> = { darwin: "darwin", linux: "linux", win32: "windows" }
-    const archMap: Record<string, string> = { x64: "x64", arm64: "arm64" }
-    const plat = platformMap[process.platform] ?? process.platform
-    const arch = archMap[process.arch] ?? process.arch
-    const binaryPath = path.join(pkgDir, "dist", `opencode-${plat}-${arch}`, "bin", "opencode")
-    if (await Bun.file(binaryPath).exists()) {
-      log.info(`Using opencode binary: ${binaryPath}`)
-      return { cmd: [binaryPath], env: {} }
-    }
-
-    throw new Error(
-      `opencode not found at ${repoDir} (no binary in dist/ and no src/index.ts)`,
-    )
   }
 
-  // 2. Global install
+  const platformMap: Record<string, string> = { darwin: "darwin", linux: "linux", win32: "windows" }
+  const archMap: Record<string, string> = { x64: "x64", arm64: "arm64" }
+  const plat = platformMap[process.platform] ?? process.platform
+  const arch = archMap[process.arch] ?? process.arch
+  const binaryPath = path.join(pkgDir, "dist", `opencode-${plat}-${arch}`, "bin", "opencode")
+  if (await Bun.file(binaryPath).exists()) {
+    return {
+      resolution: { cmd: [binaryPath], env: {} },
+      logLine: `Using opencode binary: ${binaryPath}`,
+    }
+  }
+
+  throw new Error(`opencode not found at ${repoDir} (no binary in dist/ and no src/index.ts)`)
+}
+
+// Throws if the user set `headlessAgent.opencodePath` to something missing —
+// an explicit path that doesn't resolve is a config error, not a fallthrough.
+const tierHeadlessExplicit: Tier = async () => {
+  const raw = getHeadlessAgentConfig().opencodePath
+  if (!raw) return null
+  const binaryPath = expandHome(raw)
+  if (!(await Bun.file(binaryPath).exists())) {
+    throw new Error(`headlessAgent.opencodePath does not exist: ${binaryPath}`)
+  }
+  return {
+    resolution: { cmd: [binaryPath], env: {} },
+    logLine: `Using headlessAgent.opencodePath: ${binaryPath}`,
+  }
+}
+
+const tierGlobal: Tier = async () => {
   const { exitCode, stdout } = await runCommand(["which", "opencode"])
-  if (exitCode === 0 && stdout.trim()) {
-    log.info(`Using global opencode: ${stdout.trim()}`)
-    return { cmd: [stdout.trim()], env: {} }
-  }
+  if (exitCode !== 0 || !stdout.trim()) return null
+  const p = stdout.trim()
+  return { resolution: { cmd: [p], env: {} }, logLine: `Using global opencode: ${p}` }
+}
 
-  throw new Error(
-    "opencode not found. Tried: skvm-bundled copy (reinstall skvm via install.sh or npm), " +
-      "skvm.config.json → adapters.opencode, and global `which opencode`. " +
-      "See https://skillvm.ai/install for setup.",
+async function resolveTiers(tiers: Tier[], notFoundMsg: string): Promise<OpenCodeResolution> {
+  for (const tier of tiers) {
+    const hit = await tier()
+    if (hit) {
+      log.info(hit.logLine)
+      return hit.resolution
+    }
+  }
+  throw new Error(`${notFoundMsg} ${INSTALL_HELP}`)
+}
+
+// ---------------------------------------------------------------------------
+// Public resolvers
+// ---------------------------------------------------------------------------
+
+// The two resolvers exist because adapter-mode (bench target, "measure what
+// the user has") and headless-mode (internal tuner, "stay reproducible") want
+// opposite priorities for the same tiers. Keep them as two explicit tier
+// arrays so the ordering difference is visible at a glance.
+
+export async function resolveAdapterOpenCodeCmd(): Promise<OpenCodeResolution> {
+  return resolveTiers(
+    [tierAdapterRepo, tierGlobal, tierBundled],
+    "opencode not found for adapter. Tried: skvm.config.json → adapters.opencode, global `which opencode`, and skvm-bundled copy.",
   )
+}
+
+let _headlessCache: Promise<OpenCodeResolution> | undefined
+export async function resolveHeadlessOpenCodeCmd(): Promise<OpenCodeResolution> {
+  // Cache: jit-optimize / jit-boost call this once per task in hot loops,
+  // and the config is process-lifetime constant.
+  if (!_headlessCache) {
+    _headlessCache = resolveTiers(
+      [tierHeadlessExplicit, tierBundled, tierGlobal],
+      "opencode not found for headless agent. Tried: headlessAgent.opencodePath, skvm-bundled copy (reinstall skvm via install.sh or npm), and global `which opencode`.",
+    ).catch((err) => {
+      _headlessCache = undefined
+      throw err
+    })
+  }
+  return _headlessCache
 }
 
 /**
@@ -285,7 +350,7 @@ export class OpenCodeAdapter implements AgentAdapter {
   async setup(config: AdapterConfig): Promise<void> {
     this.model = toOpenCodeModel(config.model)
     this.timeoutMs = config.timeoutMs ?? TASK_FILE_DEFAULTS.timeoutMs
-    const resolved = await resolveOpenCodeCmd()
+    const resolved = await resolveAdapterOpenCodeCmd()
     this.cmdPrefix = resolved.cmd
     this.envOverlay = resolved.env
     log.info(`opencode command: ${this.cmdPrefix.join(" ")}`)

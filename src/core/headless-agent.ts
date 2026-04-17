@@ -21,7 +21,7 @@ import path from "node:path"
 import {
   parseNDJSON,
   eventsToRunResult,
-  resolveOpenCodeCmd,
+  resolveHeadlessOpenCodeCmd,
 } from "../adapters/opencode.ts"
 import { stripRoutingPrefix } from "../providers/registry.ts"
 import type { TokenUsage, ProviderOverride } from "./types.ts"
@@ -220,7 +220,7 @@ async function runOpenCodeDriver(
   opts: HeadlessAgentRunOptions,
 ): Promise<HeadlessAgentRunResult> {
   const cwd = path.resolve(opts.cwd)
-  const resolved = await resolveOpenCodeCmd()
+  const resolved = await resolveHeadlessOpenCodeCmd()
   const config = getHeadlessAgentConfig()
   const model = prefixModel(opts.model, config.modelPrefix)
 

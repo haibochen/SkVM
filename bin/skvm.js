@@ -16,10 +16,17 @@ const binary = path.join(here, process.platform === "win32" ? "skvm.exe" : "skvm
 
 let cmd
 let args
+let childEnv = process.env
 
 if (existsSync(binary)) {
   cmd = binary
   args = process.argv.slice(2)
+  // Hand the child its real on-disk install root. Inside a Bun single-file
+  // executable, process.execPath is a virtual /$bunfs/... path — the child
+  // can't derive vendor/ location without this hint. Only set when invoking
+  // the compiled binary; the dev fallback runs from the repo tree and has
+  // no bundled vendor/ to find.
+  childEnv = { ...process.env, SKVM_INSTALL_ROOT: path.resolve(here, "..") }
 } else {
   const repoRoot = path.resolve(here, "..")
   const entry = path.join(repoRoot, "src", "index.ts")
@@ -35,7 +42,7 @@ if (existsSync(binary)) {
   args = ["run", entry, ...process.argv.slice(2)]
 }
 
-const result = spawnSync(cmd, args, { stdio: "inherit" })
+const result = spawnSync(cmd, args, { stdio: "inherit", env: childEnv })
 if (result.error) {
   console.error(`skvm: failed to spawn ${cmd}: ${result.error.message}`)
   process.exit(1)
