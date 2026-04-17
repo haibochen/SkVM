@@ -140,13 +140,16 @@ skvm aot-compile \
 
 优化器会从 Skill 本身生成任务，然后反复执行“修改 → 重跑 → 评分”的循环。
 
+默认情况下，synthetic 模式会生成 2 个 training task 和 1 个独立的 test task。
+
 ```bash
 skvm jit-optimize \
   --skill=path/to/skill-dir \
   --task-source=synthetic \
+  --task-concurrency=3 \
   --target-adapter=bare-agent \
   --optimizer-model=anthropic/claude-sonnet-4.6 \
-  --rounds=2 \
+  --rounds=1 \
   --target-model=qwen/qwen3.5-35b-a3b
 ```
 

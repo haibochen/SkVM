@@ -138,13 +138,16 @@ Compiled variants are written under `~/.skvm/proposals/aot-compile/<adapter>/<sa
 
 The optimizer LLM derives tasks from the skill itself, then loops edit → rerun → score.
 
+By default, synthetic mode generates 2 training tasks and 1 held-out test task.
+
 ```bash
 skvm jit-optimize \
   --skill=path/to/skill-dir \
   --task-source=synthetic \
+  --task-concurrency=3 \
   --target-adapter=bare-agent \
   --optimizer-model=anthropic/claude-sonnet-4.6 \
-  --rounds=2 \
+  --rounds=1 \
   --target-model=qwen/qwen3.5-35b-a3b
 ```
 
