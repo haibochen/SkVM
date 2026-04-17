@@ -113,9 +113,12 @@ skvm proposals accept <id>                                    # deploy the engin
 skvm proposals accept <id> --round=2                          # override: deploy round 2 instead
 skvm proposals accept <id> --target=<dir>                     # deploy to a non-default skill dir
 skvm proposals reject <id>                                    # mark as rejected (no deploy)
+skvm proposals cancel <id>                                    # stop a detached run still in phase=running
 ```
 
 Proposal id format: `<harness>/<target-model>/<skill-name>/<timestamp>`. When the user gives you an id like `bare-agent/claude-sonnet-4.6/calendar/20260401T120000Z`, pass it verbatim — do not reformat it.
+
+Detached runs (`skvm jit-optimize --detach`) write an extra `run-status.json` inside the proposal directory that tracks execution phase (`running` / `done` / `failed`), separate from `meta.json.status`. `skvm proposals show` renders this header and tails the last 20 lines of `run.log` for running / failed detached runs. If the user wants to stop a detached optimization mid-run, use `cancel`; sync runs (no `--detach`) do not need `cancel`, they block until complete.
 
 **Critical rule**: only run `skvm proposals accept` when the user has **explicitly** asked to deploy. If the user just says "check the proposals", run `list` and `show` and stop there. Accepting without confirmation overwrites the skill files in place.
 
