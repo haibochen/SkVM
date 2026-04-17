@@ -42,7 +42,7 @@ export OPENROUTER_API_KEY=sk-or-...
 skvm --help
 ```
 
-The installer drops a standalone binary at `~/.local/share/skvm/bin/skvm` (symlinked into `~/.local/bin/skvm`) and bundles a private isolated `opencode` copy used by `skvm jit-optimize` — it does not touch any global `opencode` install you may have.
+The installer drops a standalone binary at `~/.local/share/skvm/bin/skvm` (symlinked into `~/.local/bin/skvm`) and bundles a private, isolated headless agent runtime used internally by `skvm jit-optimize` — it is fully self-contained and does not touch any agent or CLI you may have installed globally.
 
 **Agent-facing skills** ship inside the install. Copy them into your agent harness's skills directory to teach it how to drive skvm:
 

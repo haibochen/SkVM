@@ -2,7 +2,7 @@
 # SkVM one-liner installer.
 #
 # Usage:
-#   curl -fsSL https://skillvm.ai/install.sh | sh
+#   curl -fsSL <public-mirror>/install.sh | sh
 #
 # Options (via environment):
 #   SKVM_VERSION=v0.1.0     # pin a specific version (default: latest)
@@ -22,14 +22,17 @@ RELEASE_REPO="SkVM"
 # ------------ download sources (auto-fallback) ------------
 # The installer tries each base in order. If GitHub is unreachable or stalls
 # (common from mainland China), the script silently falls back to the
-# skillvm.ai mirror — no env var or user action required.
+# configured non-GitHub mirror — no env var or user action required.
 #
 # Keep this list in sync with install/release-host.json (postinstall.js uses it).
 # The mirror must mirror GitHub's path structure:
 #   <releases_base>/<owner>/<repo>/releases/download/<tag>/<asset>
 #   <api_base>/repos/<owner>/<repo>/releases/latest     (static JSON ok)
-SOURCE_RELEASES="https://github.com https://skillvm.ai/gh"
-SOURCE_API="https://api.github.com https://skillvm.ai/gh-api"
+DEFAULT_MIRROR_BASE="https://skvm.oss-cn-shanghai.aliyuncs.com"
+MIRROR_RELEASES="${DEFAULT_MIRROR_BASE}/gh"
+MIRROR_API="${DEFAULT_MIRROR_BASE}/gh-api"
+SOURCE_RELEASES="https://github.com ${MIRROR_RELEASES}"
+SOURCE_API="https://api.github.com ${MIRROR_API}"
 
 # Optional override (advanced): SKVM_DOWNLOAD_BASE=github|mirror|<custom-url>
 case "${SKVM_DOWNLOAD_BASE:-}" in
@@ -39,8 +42,8 @@ case "${SKVM_DOWNLOAD_BASE:-}" in
     SOURCE_API="https://api.github.com"
     ;;
   mirror|cn)
-    SOURCE_RELEASES="https://skillvm.ai/gh"
-    SOURCE_API="https://skillvm.ai/gh-api"
+    SOURCE_RELEASES="${MIRROR_RELEASES}"
+    SOURCE_API="${MIRROR_API}"
     ;;
   http*|https*)
     _base="${SKVM_DOWNLOAD_BASE%/}"

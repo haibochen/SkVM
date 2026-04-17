@@ -42,7 +42,7 @@ export OPENROUTER_API_KEY=sk-or-...
 skvm --help
 ```
 
-安装器会将独立二进制放在 `~/.local/share/skvm/bin/skvm`（并链接到 `~/.local/bin/skvm`），同时附带一份隔离的 `opencode` 副本，供 `skvm jit-optimize` 使用，不会影响你系统里已有的全局 `opencode`。
+安装器会将独立二进制放在 `~/.local/share/skvm/bin/skvm`（并链接到 `~/.local/bin/skvm`），同时内置一份隔离的 headless agent 运行时，供 `skvm jit-optimize` 内部使用；整个安装完全自包含，不会影响你系统中已有的任何 agent 或 CLI。
 
 **面向 Agent 的 Skill** 会随安装包一起提供。把它们复制到对应 Agent Harness 的 skills 目录后，Agent 就能学会如何驱动 skvm：
 
